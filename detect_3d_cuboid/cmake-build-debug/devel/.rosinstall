@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/chen/CLionProjects/cube_slam/src/cube_slam/detect_3d_cuboid/cmake-build-debug/devel/setup.sh

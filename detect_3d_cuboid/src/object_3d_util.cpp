@@ -2,6 +2,9 @@
 #include "detect_3d_cuboid/matrix_utils.h"
 
 #include <iostream>
+#include <algorithm>
+#include <numeric>
+
 // opencv
 #include <opencv/cv.h>
 #include <opencv2/core/core.hpp>

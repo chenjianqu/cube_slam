@@ -2,6 +2,7 @@
 
 // std c
 #include <string>
+#include <vector>
 
 // Eigen
 #include <Eigen/Core>
@@ -34,6 +35,7 @@ class cuboid // matlab cuboid struct. cuboid on ground. only has yaw, no obj rol
 
       void print_cuboid(); // print pose information
 };
+
 typedef std::vector<cuboid *> ObjectSet; // for each 2D box, the set of generated 3D cuboids
 
 struct cam_pose_infos

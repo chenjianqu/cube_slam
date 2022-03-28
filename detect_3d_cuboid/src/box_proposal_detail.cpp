@@ -7,6 +7,7 @@
 #include <string>
 #include <sstream>
 #include <ctime>
+#include <numeric>
 
 // opencv pcl
 #include <opencv/cv.h>
@@ -53,12 +54,20 @@ void detect_3d_cuboid::set_cam_pose(const Matrix4d &transToWolrd)
 	//TODO relative measure? not good... then need to change transToWolrd.
 }
 
+/**
+ * 3D包围框生成
+ * @param rgb_img 输入图像
+ * @param transToWolrd 外参
+ * @param obj_bbox_coors 二维包围框
+ * @param all_lines_raw 图像中检测到的线
+ * @param all_object_cuboids
+ */
 void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &transToWolrd, const MatrixXd &obj_bbox_coors,
 									 MatrixXd all_lines_raw, std::vector<ObjectSet> &all_object_cuboids)
 {
 	set_cam_pose(transToWolrd);
 	cam_pose_raw = cam_pose;
-
+    //转换为灰度图
 	cv::Mat gray_img;
 	if (rgb_img.channels() == 3)
 		cv::cvtColor(rgb_img, gray_img, CV_BGR2GRAY);
@@ -68,7 +77,7 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 	int img_width = rgb_img.cols;
 	int img_height = rgb_img.rows;
 
-	int num_2d_objs = obj_bbox_coors.rows();
+	int num_2d_objs = obj_bbox_coors.rows();//二维目标框的数量
 	all_object_cuboids.resize(num_2d_objs);
 
 	vector<bool> all_configs;
@@ -88,8 +97,7 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 	// if also consider config2, need to weight two erros, in order to compare two configurations
 
 	align_left_right_edges(all_lines_raw); // this should be guaranteed when detecting edges
-	if (whether_plot_detail_images)
-	{
+	if (whether_plot_detail_images){
 		cv::Mat output_img;
 		plot_image_with_edges(rgb_img, output_img, all_lines_raw, cv::Scalar(255, 0, 0));
 		cv::imshow("Raw detected Edges", output_img); //cv::waitKey(0);
