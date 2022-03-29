@@ -32,6 +32,14 @@ Eigen::Quaternion<T> zyx_euler_to_quat(const T &roll, const T &pitch, const T &y
 template Eigen::Quaterniond zyx_euler_to_quat<double>(const double &, const double &, const double &);
 template Eigen::Quaternionf zyx_euler_to_quat<float>(const float &, const float &, const float &);
 
+/**
+ * 四元数转换为RPY角
+ * @tparam T
+ * @param q
+ * @param roll
+ * @param pitch
+ * @param yaw
+ */
 template <class T>
 void quat_to_euler_zyx(const Eigen::Quaternion<T> &q, T &roll, T &pitch, T &yaw)
 {
@@ -44,6 +52,7 @@ void quat_to_euler_zyx(const Eigen::Quaternion<T> &q, T &roll, T &pitch, T &yaw)
     pitch = asin(2 * (qw * qy - qz * qx));
     yaw = atan2(2 * (qw * qz + qx * qy), 1 - 2 * (qy * qy + qz * qz));
 }
+
 template void quat_to_euler_zyx<double>(const Eigen::Quaterniond &, double &, double &, double &);
 template void quat_to_euler_zyx<float>(const Eigen::Quaternionf &, float &, float &, float &);
 
@@ -168,6 +177,7 @@ Eigen::Matrix<T, Eigen::Dynamic, 1> homo_to_real_coord_vec(const Eigen::Matrix<T
 }
 template VectorXd homo_to_real_coord_vec<double>(const VectorXd &);
 template VectorXf homo_to_real_coord_vec<float>(const VectorXf &);
+
 
 void fast_RemoveRow(MatrixXd &matrix, int rowToRemove, int &total_line_number)
 {
@@ -346,20 +356,27 @@ template void print_vector(const std::vector<double> &);
 template void print_vector(const std::vector<float> &);
 template void print_vector(const std::vector<int> &);
 
+/**
+ * 生成某一范围内的递增子序列，同matlab中的linespace函数
+ * @tparam T
+ * @param starting
+ * @param ending
+ * @param step
+ * @param res
+ */
 template <class T>
 void linespace(T starting, T ending, T step, std::vector<T> &res)
 {
     res.reserve((ending - starting) / step + 2);
-    while (starting <= ending)
-    {
+    while (starting <= ending){
         res.push_back(starting);
         starting += step; // TODO could recode to better handle rounding errors
-        if (res.size() > 1000)
-        {
+        if (res.size() > 1000){
             std::cout << "Linespace too large size!!!!" << std::endl;
             break;
         }
     }
 }
+
 template void linespace(int, int, int, std::vector<int> &);
 template void linespace(double, double, double, std::vector<double> &);

@@ -40,11 +40,16 @@ void detect_3d_cuboid::set_calibration(const Matrix3d &Kalib)
 	cam_pose.invK = Kalib.inverse();
 }
 
+/**
+ * 设置位姿相关的参数
+ * @param transToWolrd
+ */
 void detect_3d_cuboid::set_cam_pose(const Matrix4d &transToWolrd)
 {
 	cam_pose.transToWolrd = transToWolrd;
 	cam_pose.rotationToWorld = transToWolrd.topLeftCorner<3, 3>();
 	Vector3d euler_angles;
+    //转换为欧拉角
 	quat_to_euler_zyx(Quaterniond(cam_pose.rotationToWorld), euler_angles(0), euler_angles(1), euler_angles(2));
 	cam_pose.euler_angle = euler_angles;
 	cam_pose.invR = cam_pose.rotationToWorld.inverse();
@@ -96,7 +101,8 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 	double weight_skew_error = 1.5;
 	// if also consider config2, need to weight two erros, in order to compare two configurations
 
-	align_left_right_edges(all_lines_raw); // this should be guaranteed when detecting edges
+	align_left_right_edges(all_lines_raw); //确保线的起点在左边
+    //绘制所有的线
 	if (whether_plot_detail_images){
 		cv::Mat output_img;
 		plot_image_with_edges(rgb_img, output_img, all_lines_raw, cv::Scalar(255, 0, 0));
@@ -104,14 +110,14 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 	}
 
 	// find ground-wall boundary edges
-	Vector4d ground_plane_world(0, 0, 1, 0); // treated as column vector % in my pop-up code, I use [0 0 -1 0]. here I want the normal pointing innerwards, towards the camera to match surface normal prediction
+    // treated as column vector % in my pop-up code, I use [0 0 -1 0]. here I want the normal pointing innerwards,
+    // towards the camera to match surface normal prediction
+	Vector4d ground_plane_world(0, 0, 1, 0);
 	Vector4d ground_plane_sensor = cam_pose.transToWolrd.transpose() * ground_plane_world;
 
-	//       int object_id=1;
-	for (int object_id = 0; object_id < num_2d_objs; object_id++)
-	{
-		// 	  std::cout<<"object id  "<<object_id<<std::endl;
+	for (int object_id = 0; object_id < num_2d_objs; object_id++){
 		ca::Profiler::tictoc("One 3D object total time");
+        //包围框的四个角
 		int left_x_raw = obj_bbox_coors(object_id, 0);
 		int top_y_raw = obj_bbox_coors(object_id, 1);
 		int obj_width_raw = obj_bbox_coors(object_id, 2);
@@ -119,10 +125,10 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 		int right_x_raw = left_x_raw + obj_bbox_coors(object_id, 2);
 		int down_y_raw = top_y_raw + obj_height_raw;
 
+        /// 高度变换的序列
 		std::vector<int> down_expand_sample_all;
 		down_expand_sample_all.push_back(0);
-		if (whether_sample_bbox_height) // 2D object detection might not be accurate
-		{
+		if (whether_sample_bbox_height){ // 2D object detection might not be accurate
 			int down_expand_sample_ranges = max(min(20, obj_height_raw - 90), 20);
 			down_expand_sample_ranges = min(down_expand_sample_ranges, img_height - top_y_raw - obj_height_raw - 1); // should lie inside the image  -1 for c++ index
 			if (down_expand_sample_ranges > 10)																		 // if expand large margin, give more samples.
@@ -131,6 +137,7 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 		}
 
 		// NOTE later if in video, could use previous object yaw..., also reduce search range
+        ///生成yaw角的序列
 		double yaw_init = cam_pose.camera_yaw - 90.0 / 180.0 * M_PI; // yaw init is directly facing the camera, align with camera optical axis
 		std::vector<double> obj_yaw_samples;
 		linespace<double>(yaw_init - 45.0 / 180.0 * M_PI, yaw_init + 45.0 / 180.0 * M_PI, 6.0 / 180.0 * M_PI, obj_yaw_samples);
@@ -141,20 +148,21 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 		ObjectSet raw_obj_proposals;
 		raw_obj_proposals.reserve(100);
 		// 	    int sample_down_expan_id=1;
-		for (int sample_down_expan_id = 0; sample_down_expan_id < down_expand_sample_all.size(); sample_down_expan_id++)
-		{
-			int down_expand_sample = down_expand_sample_all[sample_down_expan_id];
-			int obj_height_expan = obj_height_raw + down_expand_sample;
-			int down_y_expan = top_y_raw + obj_height_expan;
-			double obj_diaglength_expan = sqrt(obj_width_raw * obj_width_raw + obj_height_expan * obj_height_expan);
 
+        ///遍历高度
+		for (int sample_down_expan_id = 0; sample_down_expan_id < down_expand_sample_all.size(); sample_down_expan_id++){
+            //计算该采样高度对应的值
+            int down_expand_sample = down_expand_sample_all[sample_down_expan_id];
+			int obj_height_expan = obj_height_raw + down_expand_sample;//采样高度
+			int down_y_expan = top_y_raw + obj_height_expan;//对应的bottom_y
+			double obj_diaglength_expan = sqrt(obj_width_raw * obj_width_raw + obj_height_expan * obj_height_expan);//对应的对角线长度
+            ///采样落在二维框顶部的投影点
 			// sample points on the top edges, if edge is too large, give more samples. give at least 10 samples for all edges. for small object, object pose changes lots
 			int top_sample_resolution = round(min(20, obj_width_raw / 10)); //  25 pixels
 			std::vector<int> top_x_samples;
 			linespace<int>(left_x_raw + 5, right_x_raw - 5, top_sample_resolution, top_x_samples);
 			MatrixXd sample_top_pts(2, top_x_samples.size());
-			for (int ii = 0; ii < top_x_samples.size(); ii++)
-			{
+			for (int ii = 0; ii < top_x_samples.size(); ii++){
 				sample_top_pts(0, ii) = top_x_samples[ii];
 				sample_top_pts(1, ii) = top_y_raw;
 			}
@@ -170,31 +178,31 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 			Vector2d expan_distmap_lefttop = Vector2d(left_x_expan_distmap, top_y_expan_distmap);
 			Vector2d expan_distmap_rightbottom = Vector2d(right_x_expan_distmap, down_y_expan_distmap);
 
-			// find edges inside the object bounding box
+            ///找到在二维目标框内的edges
 			MatrixXd all_lines_inside_object(all_lines_raw.rows(), all_lines_raw.cols()); // first allocate a large matrix, then only use the toprows to avoid copy, alloc
 			int inside_obj_edge_num = 0;
-			for (int edge_id = 0; edge_id < all_lines_raw.rows(); edge_id++)
-				if (check_inside_box(all_lines_raw.row(edge_id).head<2>(), expan_distmap_lefttop, expan_distmap_rightbottom))
-					if (check_inside_box(all_lines_raw.row(edge_id).tail<2>(), expan_distmap_lefttop, expan_distmap_rightbottom))
-					{
-						all_lines_inside_object.row(inside_obj_edge_num) = all_lines_raw.row(edge_id);
-						inside_obj_edge_num++;
-					}
+			for (int edge_id = 0; edge_id < all_lines_raw.rows(); edge_id++){
+				if (check_inside_box(all_lines_raw.row(edge_id).head<2>(), expan_distmap_lefttop, expan_distmap_rightbottom) &&
+                    check_inside_box(all_lines_raw.row(edge_id).tail<2>(), expan_distmap_lefttop, expan_distmap_rightbottom)){
+                    all_lines_inside_object.row(inside_obj_edge_num) = all_lines_raw.row(edge_id);
+                    inside_obj_edge_num++;
+                }
+            }
 
+            ///融合边，剔除短边
 			// merge edges and remove short lines, after finding object edges.  edge merge in small regions should be faster than all.
 			double pre_merge_dist_thre = 20;
 			double pre_merge_angle_thre = 5;
 			double edge_length_threshold = 30;
 			MatrixXd all_lines_merge_inobj;
-			merge_break_lines(all_lines_inside_object.topRows(inside_obj_edge_num), all_lines_merge_inobj, pre_merge_dist_thre,
-							  pre_merge_angle_thre, edge_length_threshold);
-
-			// compute edge angels and middle points
+			merge_break_lines(all_lines_inside_object.topRows(inside_obj_edge_num), all_lines_merge_inobj,
+                              pre_merge_dist_thre, pre_merge_angle_thre, edge_length_threshold);
+			/// compute edge angels and middle points
 			VectorXd lines_inobj_angles(all_lines_merge_inobj.rows());
 			MatrixXd edge_mid_pts(all_lines_merge_inobj.rows(), 2);
-			for (int i = 0; i < all_lines_merge_inobj.rows(); i++)
-			{
-				lines_inobj_angles(i) = std::atan2(all_lines_merge_inobj(i, 3) - all_lines_merge_inobj(i, 1), all_lines_merge_inobj(i, 2) - all_lines_merge_inobj(i, 0)); // [-pi/2 -pi/2]
+			for (int i = 0; i < all_lines_merge_inobj.rows(); i++){
+				lines_inobj_angles(i) = std::atan2(all_lines_merge_inobj(i, 3) - all_lines_merge_inobj(i, 1),
+                                                   all_lines_merge_inobj(i, 2) - all_lines_merge_inobj(i, 0)); // [-pi/2 -pi/2]
 				edge_mid_pts.row(i).head<2>() = (all_lines_merge_inobj.row(i).head<2>() + all_lines_merge_inobj.row(i).tail<2>()) / 2;
 			}
 
@@ -206,8 +214,7 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 			cv::Mat dist_map;
 			cv::distanceTransform(255 - im_canny, dist_map, CV_DIST_L2, 3); // dist_map is float datatype
 
-			if (whether_plot_detail_images)
-			{
+			if (whether_plot_detail_images){
 				cv::imshow("im_canny", im_canny);
 				cv::Mat dist_map_img;
 				cv::normalize(dist_map, dist_map_img, 0.0, 1.0, cv::NORM_MINMAX);
@@ -220,28 +227,30 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 			MatrixXd all_box_corners_2d_one_objH(400, 8);
 			int valid_config_number_one_objH = 0;
 
+            ///采样r p y角
 			std::vector<double> cam_roll_samples;
 			std::vector<double> cam_pitch_samples;
-			if (whether_sample_cam_roll_pitch)
-			{
-				linespace<double>(cam_pose_raw.euler_angle(0) - 6.0 / 180.0 * M_PI, cam_pose_raw.euler_angle(0) + 6.0 / 180.0 * M_PI, 3.0 / 180.0 * M_PI, cam_roll_samples);
-				linespace<double>(cam_pose_raw.euler_angle(1) - 6.0 / 180.0 * M_PI, cam_pose_raw.euler_angle(1) + 6.0 / 180.0 * M_PI, 3.0 / 180.0 * M_PI, cam_pitch_samples);
+			if (whether_sample_cam_roll_pitch){
+				linespace<double>(cam_pose_raw.euler_angle(0) - 6.0 / 180.0 * M_PI, cam_pose_raw.euler_angle(0) +
+                6.0 / 180.0 * M_PI, 3.0 / 180.0 * M_PI, cam_roll_samples);
+				linespace<double>(cam_pose_raw.euler_angle(1) - 6.0 / 180.0 * M_PI, cam_pose_raw.euler_angle(1) +
+                6.0 / 180.0 * M_PI, 3.0 / 180.0 * M_PI, cam_pitch_samples);
 			}
-			else
-			{
+			else{
 				cam_roll_samples.push_back(cam_pose_raw.euler_angle(0));
 				cam_pitch_samples.push_back(cam_pose_raw.euler_angle(1));
 			}
+
 			// different from matlab. first for loop yaw, then for configurations.
-			// 	      int obj_yaw_id=8;
-			for (int cam_roll_id = 0; cam_roll_id < cam_roll_samples.size(); cam_roll_id++)
-				for (int cam_pitch_id = 0; cam_pitch_id < cam_pitch_samples.size(); cam_pitch_id++)
-					for (int obj_yaw_id = 0; obj_yaw_id < obj_yaw_samples.size(); obj_yaw_id++)
-					{
-						if (whether_sample_cam_roll_pitch)
-						{
+            /// 遍历每个RPY角
+			for (int cam_roll_id = 0; cam_roll_id < cam_roll_samples.size(); cam_roll_id++){
+				for (int cam_pitch_id = 0; cam_pitch_id < cam_pitch_samples.size(); cam_pitch_id++){
+					for (int obj_yaw_id = 0; obj_yaw_id < obj_yaw_samples.size(); obj_yaw_id++){
+
+						if (whether_sample_cam_roll_pitch){
 							Matrix4d transToWolrd_new = transToWolrd;
-							transToWolrd_new.topLeftCorner<3, 3>() = euler_zyx_to_rot<double>(cam_roll_samples[cam_roll_id], cam_pitch_samples[cam_pitch_id], cam_pose_raw.euler_angle(2));
+							transToWolrd_new.topLeftCorner<3, 3>() = euler_zyx_to_rot<double>(
+                                    cam_roll_samples[cam_roll_id], cam_pitch_samples[cam_pitch_id], cam_pose_raw.euler_angle(2));
 							set_cam_pose(transToWolrd_new);
 							ground_plane_sensor = cam_pose.transToWolrd.transpose() * ground_plane_world;
 						}
@@ -418,7 +427,9 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 										printf("Configuration %d fails at corner 8, outside box\n", config_id);
 									continue;
 								}
-								if (((corner_8_down - corner_4_top).norm() < shorted_edge_thre) || ((corner_8_down - corner_5_down).norm() < shorted_edge_thre) || ((corner_8_down - corner_7_down).norm() < shorted_edge_thre))
+								if (((corner_8_down - corner_4_top).norm() < shorted_edge_thre) ||
+                                    ((corner_8_down - corner_5_down).norm() < shorted_edge_thre) ||
+                                    ((corner_8_down - corner_7_down).norm() < shorted_edge_thre))
 								{
 									if (print_details)
 										printf("Configuration %d fails at edge 8-4/8-5/8-7, too short\n", config_id);
@@ -434,12 +445,12 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 
 								MatrixXi visible_edge_pt_ids, vps_box_edge_pt_ids;
 								double sum_dist;
-								if (config_id == 1)
-								{
+								if (config_id == 1){
 									visible_edge_pt_ids.resize(9, 2);
 									visible_edge_pt_ids << 1, 2, 2, 3, 3, 4, 4, 1, 2, 6, 3, 5, 4, 8, 5, 8, 5, 6;
 									vps_box_edge_pt_ids.resize(3, 4);
-									vps_box_edge_pt_ids << 1, 2, 8, 5, 4, 1, 5, 6, 4, 8, 2, 6; // six edges. each row represents two edges [e1_1 e1_2   e2_1 e2_2;...] of one VP
+                                    // six edges. each row represents two edges [e1_1 e1_2   e2_1 e2_2;...] of one VP
+									vps_box_edge_pt_ids << 1, 2, 8, 5, 4, 1, 5, 6, 4, 8, 2, 6;
 									visible_edge_pt_ids.array() -= 1;
 									vps_box_edge_pt_ids.array() -= 1; //change to c++ index
 									sum_dist = box_edge_sum_dists(dist_map, box_corners_2d_float_shift, visible_edge_pt_ids);
@@ -449,18 +460,23 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 									visible_edge_pt_ids.resize(7, 2);
 									visible_edge_pt_ids << 1, 2, 2, 3, 3, 4, 4, 1, 2, 6, 3, 5, 5, 6;
 									vps_box_edge_pt_ids.resize(3, 4);
-									vps_box_edge_pt_ids << 1, 2, 3, 4, 4, 1, 5, 6, 3, 5, 2, 6; // six edges. each row represents two edges [e1_1 e1_2   e2_1 e2_2;...] of one VP
+                                    // six edges. each row represents two edges [e1_1 e1_2   e2_1 e2_2;...] of one VP
+									vps_box_edge_pt_ids << 1, 2, 3, 4, 4, 1, 5, 6, 3, 5, 2, 6;
 									visible_edge_pt_ids.array() -= 1;
 									vps_box_edge_pt_ids.array() -= 1;
 									sum_dist = box_edge_sum_dists(dist_map, box_corners_2d_float_shift, visible_edge_pt_ids, reweight_edge_distance);
 								}
 								double total_angle_diff = box_edge_alignment_angle_error(all_vp_bound_edge_angles, vps_box_edge_pt_ids, box_corners_2d_float);
-								all_configs_error_one_objH.row(valid_config_number_one_objH).head<4>() = Vector4d(config_id, vp_1_position, obj_yaw_esti, sample_top_pt_id);
-								all_configs_error_one_objH.row(valid_config_number_one_objH).segment<3>(4) = Vector3d(sum_dist / obj_diaglength_expan, total_angle_diff, down_expand_sample);
+								all_configs_error_one_objH.row(valid_config_number_one_objH).head<4>() =
+								        Vector4d(config_id, vp_1_position, obj_yaw_esti, sample_top_pt_id);
+								all_configs_error_one_objH.row(valid_config_number_one_objH).segment<3>(4) =
+								        Vector3d(sum_dist / obj_diaglength_expan, total_angle_diff, down_expand_sample);
 								if (whether_sample_cam_roll_pitch)
-									all_configs_error_one_objH.row(valid_config_number_one_objH).segment<2>(7) = Vector2d(cam_roll_samples[cam_roll_id], cam_pitch_samples[cam_pitch_id]);
+									all_configs_error_one_objH.row(valid_config_number_one_objH).segment<2>(7) =
+									        Vector2d(cam_roll_samples[cam_roll_id], cam_pitch_samples[cam_pitch_id]);
 								else
-									all_configs_error_one_objH.row(valid_config_number_one_objH).segment<2>(7) = Vector2d(cam_pose_raw.euler_angle(0), cam_pose_raw.euler_angle(1));
+									all_configs_error_one_objH.row(valid_config_number_one_objH).segment<2>(7) =
+									        Vector2d(cam_pose_raw.euler_angle(0), cam_pose_raw.euler_angle(1));
 								all_box_corners_2d_one_objH.block(2 * valid_config_number_one_objH, 0, 2, 8) = box_corners_2d_float;
 								valid_config_number_one_objH++;
 								if (valid_config_number_one_objH >= all_configs_error_one_objH.rows())
@@ -471,6 +487,8 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 							} //end of config loop
 						}	 //end of top id
 					}		  //end of yaw
+                }
+            }
 
 			// 	      std::cout<<"valid_config_number_one_hseight  "<<valid_config_number_one_objH<<std::endl;
 			// 	      std::cout<<"all_configs_error_one_objH  \n"<<all_configs_error_one_objH.topRows(valid_config_number_one_objH)<<std::endl;
@@ -489,7 +507,10 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 				if (whether_sample_cam_roll_pitch)
 				{
 					Matrix4d transToWolrd_new = transToWolrd;
-					transToWolrd_new.topLeftCorner<3, 3>() = euler_zyx_to_rot<double>(all_configs_error_one_objH(raw_cube_ind, 7), all_configs_error_one_objH(raw_cube_ind, 8), cam_pose_raw.euler_angle(2));
+					transToWolrd_new.topLeftCorner<3, 3>() = euler_zyx_to_rot<double>(
+                            all_configs_error_one_objH(raw_cube_ind, 7),
+                            all_configs_error_one_objH(raw_cube_ind, 8),
+                            cam_pose_raw.euler_angle(2));
 					set_cam_pose(transToWolrd_new);
 					ground_plane_sensor = cam_pose.transToWolrd.transpose() * ground_plane_world;
 				}

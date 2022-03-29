@@ -146,13 +146,15 @@ bool check_inside_box(const Vector2d &pt, const Vector2d &box_left_top, const Ve
     return box_left_top(0) <= pt(0) && pt(0) <= box_right_bottom(0) && box_left_top(1) <= pt(1) && pt(1) <= box_right_bottom(1);
 }
 
-// make sure edges start from left to right
+/**
+ * 确保线是从左到右的，即线的起点应该在左边，终点应该在右边
+ * @param all_lines
+ */
 void align_left_right_edges(MatrixXd &all_lines)
 {
-    for (int line_id = 0; line_id < all_lines.rows(); line_id++)
-    {
-        if (all_lines(line_id, 2) < all_lines(line_id, 0))
-        {
+    for (int line_id = 0; line_id < all_lines.rows(); line_id++){
+        if (all_lines(line_id, 2) < all_lines(line_id, 0)){
+            //交换起点和终点
             Vector2d temp = all_lines.row(line_id).tail<2>();
             all_lines.row(line_id).tail<2>() = all_lines.row(line_id).head<2>();
             all_lines.row(line_id).head<2>() = temp;
@@ -170,8 +172,10 @@ void normalize_to_pi_vec(const VectorXd &raw_angles, VectorXd &new_angles)
 void atan2_vector(const VectorXd &y_vec, const VectorXd &x_vec, VectorXd &all_angles)
 {
     all_angles.resize(y_vec.rows());
-    for (int i = 0; i < y_vec.rows(); i++)
-        all_angles(i) = std::atan2(y_vec(i), x_vec(i)); // don't need normalize_to_pi, because my edges is from left to right, always [-90 90]
+    for (int i = 0; i < y_vec.rows(); i++){
+        // don't need normalize_to_pi, because my edges is from left to right, always [-90 90]
+        all_angles(i) = std::atan2(y_vec(i), x_vec(i));
+    }
 }
 
 // remove the jumping angles from -pi to pi.   to make the raw angles smoothly change.
@@ -299,35 +303,45 @@ cv::Point2f lineSegmentIntersect_f(const cv::Point2f &pt1_start, const cv::Point
     return cv::Point2f(INT_X * INT_B, INT_Y * INT_B);
 }
 
-// merge short edges into long. edges n*4  each edge should start from left to right!
+
+/**
+ * merge short edges into long. edges n*4  each edge should start from left to right!
+ * @param all_lines 输入的边
+ * @param merge_lines_out 输出的边
+ * @param pre_merge_dist_thre 距离阈值
+ * @param pre_merge_angle_thre_degree 角度阈值
+ * @param edge_length_threshold 长度阈值
+ */
 void merge_break_lines(const MatrixXd &all_lines, MatrixXd &merge_lines_out, double pre_merge_dist_thre,
                        double pre_merge_angle_thre_degree, double edge_length_threshold)
 {
     bool can_force_merge = true;
     merge_lines_out = all_lines;
-    int total_line_number = merge_lines_out.rows(); // line_number will become smaller and smaller, merge_lines_out doesn't change
+    int total_line_number = merge_lines_out.rows(); //总的线数
     int counter = 0;
     double pre_merge_angle_thre = pre_merge_angle_thre_degree / 180.0 * M_PI;
-    while ((can_force_merge) && (counter < 500))
-    {
+    ///迭代融合
+    while ((can_force_merge) && (counter < 500)){
         counter++;
         can_force_merge = false;
-        MatrixXd line_vector = merge_lines_out.topRightCorner(total_line_number, 2) - merge_lines_out.topLeftCorner(total_line_number, 2);
+        MatrixXd line_vector = merge_lines_out.topRightCorner(total_line_number, 2) -
+                merge_lines_out.topLeftCorner(total_line_number, 2);
         VectorXd all_angles;
-        atan2_vector(line_vector.col(1), line_vector.col(0), all_angles); // don't need normalize_to_pi, because my edges is from left to right, always [-90 90]
-        for (int seg1 = 0; seg1 < total_line_number - 1; seg1++)
-        {
-            for (int seg2 = seg1 + 1; seg2 < total_line_number; seg2++)
-            {
+        // don't need normalize_to_pi, because my edges is from left to right, always [-90 90]
+        atan2_vector(line_vector.col(1), line_vector.col(0), all_angles);
+        ///对于两两的边
+        for (int seg1 = 0; seg1 < total_line_number - 1; seg1++){
+            for (int seg2 = seg1 + 1; seg2 < total_line_number; seg2++){
+                //计算两条边角度的差值
                 double diff = std::abs(all_angles(seg1) - all_angles(seg2));
                 double angle_diff = std::min(diff, M_PI - diff);
-                if (angle_diff < pre_merge_angle_thre)
-                {
+                //如果角度很小
+                if (angle_diff < pre_merge_angle_thre){
                     double dist_1ed_to_2 = (merge_lines_out.row(seg1).tail(2) - merge_lines_out.row(seg2).head(2)).norm();
                     double dist_2ed_to_1 = (merge_lines_out.row(seg2).tail(2) - merge_lines_out.row(seg1).head(2)).norm();
-
-                    if ((dist_1ed_to_2 < pre_merge_dist_thre) || (dist_2ed_to_1 < pre_merge_dist_thre))
-                    {
+                    //如果端点距离很近
+                    if ((dist_1ed_to_2 < pre_merge_dist_thre) || (dist_2ed_to_1 < pre_merge_dist_thre)){
+                        //计算融合后边的起点和终点
                         Vector2d merge_start, merge_end;
                         if (merge_lines_out(seg1, 0) < merge_lines_out(seg2, 0))
                             merge_start = merge_lines_out.row(seg1).head(2);
@@ -342,8 +356,7 @@ void merge_break_lines(const MatrixXd &all_lines, MatrixXd &merge_lines_out, dou
                         double merged_angle = std::atan2(merge_end(1) - merge_start(1), merge_end(0) - merge_start(0));
                         double temp = std::abs(all_angles(seg1) - merged_angle);
                         double merge_angle_diff = std::min(temp, M_PI - temp);
-                        if (merge_angle_diff < pre_merge_angle_thre)
-                        {
+                        if (merge_angle_diff < pre_merge_angle_thre){
                             merge_lines_out.row(seg1).head(2) = merge_start;
                             merge_lines_out.row(seg1).tail(2) = merge_end;
                             fast_RemoveRow(merge_lines_out, seg2, total_line_number); //also decrease  total_line_number
@@ -357,26 +370,28 @@ void merge_break_lines(const MatrixXd &all_lines, MatrixXd &merge_lines_out, dou
                 break;
         }
     }
-    //     std::cout<<"total_line_number after mege  "<<total_line_number<<std::endl;
-    if (edge_length_threshold > 0)
-    {
-        MatrixXd line_vectors = merge_lines_out.topRightCorner(total_line_number, 2) - merge_lines_out.topLeftCorner(total_line_number, 2);
+
+    ///剔除短边
+    if (edge_length_threshold > 0){
+        MatrixXd line_vectors = merge_lines_out.topRightCorner(total_line_number, 2) -
+                merge_lines_out.topLeftCorner(total_line_number, 2);
         VectorXd line_lengths = line_vectors.rowwise().norm();
         int long_line_number = 0;
         MatrixXd long_merge_lines(total_line_number, 4);
-        for (int i = 0; i < total_line_number; i++)
-        {
-            if (line_lengths(i) > edge_length_threshold)
-            {
+        for (int i = 0; i < total_line_number; i++){
+            if (line_lengths(i) > edge_length_threshold){
                 long_merge_lines.row(long_line_number) = merge_lines_out.row(i);
                 long_line_number++;
             }
         }
         merge_lines_out = long_merge_lines.topRows(long_line_number);
     }
-    else
+    else{
         merge_lines_out.conservativeResize(total_line_number, NoChange);
+    }
 }
+
+
 
 // VPs 3*2   edge_mid_pts: n*2   vp_support_angle_thres 1*2
 // output: 3*2  each row is a VP's two boundary supported edges' angle.  if not found, nan for that entry
