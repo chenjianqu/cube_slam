@@ -130,8 +130,9 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 		down_expand_sample_all.push_back(0);
 		if (whether_sample_bbox_height){ // 2D object detection might not be accurate
 			int down_expand_sample_ranges = max(min(20, obj_height_raw - 90), 20);
-			down_expand_sample_ranges = min(down_expand_sample_ranges, img_height - top_y_raw - obj_height_raw - 1); // should lie inside the image  -1 for c++ index
-			if (down_expand_sample_ranges > 10)																		 // if expand large margin, give more samples.
+			// should lie inside the image  -1 for c++ index
+			down_expand_sample_ranges = min(down_expand_sample_ranges, img_height - top_y_raw - obj_height_raw - 1);
+			if (down_expand_sample_ranges > 10)	// if expand large margin, give more samples.
 				down_expand_sample_all.push_back(round(down_expand_sample_ranges / 2));
 			down_expand_sample_all.push_back(down_expand_sample_ranges);
 		}
@@ -157,7 +158,8 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 			int down_y_expan = top_y_raw + obj_height_expan;//对应的bottom_y
 			double obj_diaglength_expan = sqrt(obj_width_raw * obj_width_raw + obj_height_expan * obj_height_expan);//对应的对角线长度
             ///采样落在二维框顶部的投影点
-			// sample points on the top edges, if edge is too large, give more samples. give at least 10 samples for all edges. for small object, object pose changes lots
+			// sample points on the top edges, if edge is too large, give more samples. give at least 10 samples for all edges.
+			// for small object, object pose changes lots
 			int top_sample_resolution = round(min(20, obj_width_raw / 10)); //  25 pixels
 			std::vector<int> top_x_samples;
 			linespace<int>(left_x_raw + 5, right_x_raw - 5, top_sample_resolution, top_x_samples);
@@ -179,7 +181,8 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 			Vector2d expan_distmap_rightbottom = Vector2d(right_x_expan_distmap, down_y_expan_distmap);
 
             ///找到在二维目标框内的edges
-			MatrixXd all_lines_inside_object(all_lines_raw.rows(), all_lines_raw.cols()); // first allocate a large matrix, then only use the toprows to avoid copy, alloc
+            // first allocate a large matrix, then only use the toprows to avoid copy, alloc
+			MatrixXd all_lines_inside_object(all_lines_raw.rows(), all_lines_raw.cols());
 			int inside_obj_edge_num = 0;
 			for (int edge_id = 0; edge_id < all_lines_raw.rows(); edge_id++){
 				if (check_inside_box(all_lines_raw.row(edge_id).head<2>(), expan_distmap_lefttop, expan_distmap_rightbottom) &&
@@ -242,21 +245,24 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 			}
 
 			// different from matlab. first for loop yaw, then for configurations.
-            /// 遍历每个RPY角
+            /// 遍历每个Roll角和Pitch角
 			for (int cam_roll_id = 0; cam_roll_id < cam_roll_samples.size(); cam_roll_id++){
 				for (int cam_pitch_id = 0; cam_pitch_id < cam_pitch_samples.size(); cam_pitch_id++){
+				    //遍历yaw角
 					for (int obj_yaw_id = 0; obj_yaw_id < obj_yaw_samples.size(); obj_yaw_id++){
-
+                        /// 根据采样的rpy角设置变换矩阵
 						if (whether_sample_cam_roll_pitch){
 							Matrix4d transToWolrd_new = transToWolrd;
-							transToWolrd_new.topLeftCorner<3, 3>() = euler_zyx_to_rot<double>(
-                                    cam_roll_samples[cam_roll_id], cam_pitch_samples[cam_pitch_id], cam_pose_raw.euler_angle(2));
+							transToWolrd_new.topLeftCorner<3, 3>() = euler_zyx_to_rot<double>(//
+                                    cam_roll_samples[cam_roll_id],
+                                    cam_pitch_samples[cam_pitch_id],
+                                    cam_pose_raw.euler_angle(2));
 							set_cam_pose(transToWolrd_new);
 							ground_plane_sensor = cam_pose.transToWolrd.transpose() * ground_plane_world;
 						}
-
+                        //采样的yaw角
 						double obj_yaw_esti = obj_yaw_samples[obj_yaw_id];
-
+                        ///生成3个消失点
 						Vector2d vp_1, vp_2, vp_3;
 						getVanishingPoints(cam_pose.KinvR, obj_yaw_esti, vp_1, vp_2, vp_3); // for object x y z  axis
 
@@ -264,17 +270,17 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 						all_vps.row(0) = vp_1;
 						all_vps.row(1) = vp_2;
 						all_vps.row(2) = vp_3;
-						// 		  std::cout<<"obj_yaw_esti  "<<obj_yaw_esti<<"  "<<obj_yaw_id<<std::endl;
-						MatrixXd all_vp_bound_edge_angles = VP_support_edge_infos(all_vps, edge_mid_pts, lines_inobj_angles,
-																				  Vector2d(vp12_edge_angle_thre, vp3_edge_angle_thre));
-						// 		  int sample_top_pt_id=15;
-						for (int sample_top_pt_id = 0; sample_top_pt_id < sample_top_pts.cols(); sample_top_pt_id++)
-						{
-							// 		      std::cout<<"sample_top_pt_id "<<sample_top_pt_id<<std::endl;
+
+						MatrixXd all_vp_bound_edge_angles = VP_support_edge_infos(
+						        all_vps, edge_mid_pts, lines_inobj_angles,
+						        Vector2d(vp12_edge_angle_thre, vp3_edge_angle_thre));
+
+						for (int sample_top_pt_id = 0; sample_top_pt_id < sample_top_pts.cols(); sample_top_pt_id++){
 							Vector2d corner_1_top = sample_top_pts.col(sample_top_pt_id);
 							bool config_good = true;
 							int vp_1_position = 0; // 0 initial as fail,  1  on left   2 on right
-							Vector2d corner_2_top = seg_hit_boundary(vp_1, corner_1_top, Vector4d(right_x_raw, top_y_raw, right_x_raw, down_y_expan));
+							Vector2d corner_2_top = seg_hit_boundary(vp_1, corner_1_top,
+                                                                     Vector4d(right_x_raw, top_y_raw, right_x_raw, down_y_expan));
 							if (corner_2_top(0) == -1)
 							{ // vp1-corner1 doesn't hit the right boundary. check whether hit left
 								corner_2_top = seg_hit_boundary(vp_1, corner_1_top, Vector4d(left_x_raw, top_y_raw, left_x_raw, down_y_expan));
@@ -307,9 +313,11 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 								if (config_id == 1)
 								{
 									if (vp_1_position == 1) // then vp2 hit the left boundary
-										corner_4_top = seg_hit_boundary(vp_2, corner_1_top, Vector4d(left_x_raw, top_y_raw, left_x_raw, down_y_expan));
+										corner_4_top = seg_hit_boundary(vp_2, corner_1_top,
+                                                                        Vector4d(left_x_raw, top_y_raw, left_x_raw, down_y_expan));
 									else // or, then vp2 hit the right boundary
-										corner_4_top = seg_hit_boundary(vp_2, corner_1_top, Vector4d(right_x_raw, top_y_raw, right_x_raw, down_y_expan));
+										corner_4_top = seg_hit_boundary(vp_2, corner_1_top,
+                                                                        Vector4d(right_x_raw, top_y_raw, right_x_raw, down_y_expan));
 									if (corner_4_top(1) == -1)
 									{
 										config_good = false;
@@ -325,27 +333,28 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 									}
 									// compute the last point in the top face
 									corner_3_top = lineSegmentIntersect(vp_2, corner_2_top, vp_1, corner_4_top, true);
-									if (!check_inside_box(corner_3_top, Vector2d(left_x_raw, top_y_raw), Vector2d(right_x_raw, down_y_expan)))
+									if (!check_inside_box(corner_3_top, Vector2d(left_x_raw, top_y_raw),
+                                                          Vector2d(right_x_raw, down_y_expan)))
 									{ // check inside boundary. otherwise edge visibility might be wrong
 										config_good = false;
 										if (print_details)
 											printf("Configuration %d fails at corner 3, outside box\n", config_id);
 										continue;
 									}
-									if (((corner_3_top - corner_4_top).norm() < shorted_edge_thre) || ((corner_3_top - corner_2_top).norm() < shorted_edge_thre))
-									{
+									if (((corner_3_top - corner_4_top).norm() < shorted_edge_thre) ||
+									((corner_3_top - corner_2_top).norm() < shorted_edge_thre)){
 										if (print_details)
 											printf("Configuration %d fails at edge 3-4/3-2, too short\n", config_id);
 										continue;
 									}
-									// 			      cout<<"corner_3/4   "<<corner_3_top.transpose()<<"   "<<corner_4_top.transpose()<<endl;
 								}
-								if (config_id == 2)
-								{
+								if (config_id == 2){
 									if (vp_1_position == 1) // then vp2 hit the left boundary
-										corner_3_top = seg_hit_boundary(vp_2, corner_2_top, Vector4d(left_x_raw, top_y_raw, left_x_raw, down_y_expan));
+										corner_3_top = seg_hit_boundary(vp_2, corner_2_top,
+                                                                        Vector4d(left_x_raw, top_y_raw, left_x_raw, down_y_expan));
 									else // or, then vp2 hit the right boundary
-										corner_3_top = seg_hit_boundary(vp_2, corner_2_top, Vector4d(right_x_raw, top_y_raw, right_x_raw, down_y_expan));
+										corner_3_top = seg_hit_boundary(vp_2, corner_2_top,
+                                                                        Vector4d(right_x_raw, top_y_raw, right_x_raw, down_y_expan));
 									if (corner_3_top(1) == -1)
 									{
 										config_good = false;
@@ -361,14 +370,15 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 									}
 									// compute the last point in the top face
 									corner_4_top = lineSegmentIntersect(vp_1, corner_3_top, vp_2, corner_1_top, true);
-									if (!check_inside_box(corner_4_top, Vector2d(left_x_raw, top_y_expan_distmap), Vector2d(right_x_raw, down_y_expan_distmap)))
-									{
+									if (!check_inside_box(corner_4_top, Vector2d(left_x_raw, top_y_expan_distmap),
+                                                          Vector2d(right_x_raw, down_y_expan_distmap))){
 										config_good = false;
 										if (print_details)
 											printf("Configuration %d fails at corner 4, outside box\n", config_id);
 										continue;
 									}
-									if (((corner_3_top - corner_4_top).norm() < shorted_edge_thre) || ((corner_4_top - corner_1_top).norm() < shorted_edge_thre))
+									if (((corner_3_top - corner_4_top).norm() < shorted_edge_thre) ||
+									((corner_4_top - corner_1_top).norm() < shorted_edge_thre))
 									{
 										if (print_details)
 											printf("Configuration %d fails at edge 3-4/4-1, too short\n", config_id);
@@ -377,7 +387,8 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 									// 			      cout<<"corner_3/4   "<<corner_3_top.transpose()<<"   "<<corner_4_top.transpose()<<endl;
 								}
 								// compute first bottom points    computing bottom points is the same for config 1,2
-								Vector2d corner_5_down = seg_hit_boundary(vp_3, corner_3_top, Vector4d(left_x_raw, down_y_expan, right_x_raw, down_y_expan));
+								Vector2d corner_5_down = seg_hit_boundary(vp_3, corner_3_top,
+                                                                          Vector4d(left_x_raw, down_y_expan, right_x_raw, down_y_expan));
 								if (corner_5_down(1) == -1)
 								{
 									config_good = false;
@@ -399,7 +410,8 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 										printf("Configuration %d fails at corner 6, outside box\n", config_id);
 									continue;
 								}
-								if (((corner_6_down - corner_2_top).norm() < shorted_edge_thre) || ((corner_6_down - corner_5_down).norm() < shorted_edge_thre))
+								if (((corner_6_down - corner_2_top).norm() < shorted_edge_thre) ||
+								((corner_6_down - corner_5_down).norm() < shorted_edge_thre))
 								{
 									if (print_details)
 										printf("Configuration %d fails at edge 6-5/6-2, too short\n", config_id);
@@ -413,7 +425,8 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 										printf("Configuration %d fails at corner 7, outside box\n", config_id);
 									continue;
 								}
-								if (((corner_7_down - corner_1_top).norm() < shorted_edge_thre) || ((corner_7_down - corner_6_down).norm() < shorted_edge_thre))
+								if (((corner_7_down - corner_1_top).norm() < shorted_edge_thre) ||
+								((corner_7_down - corner_6_down).norm() < shorted_edge_thre))
 								{
 									if (print_details)
 										printf("Configuration %d fails at edge 7-1/7-6, too short\n", config_id);
@@ -437,8 +450,9 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 								}
 
 								MatrixXd box_corners_2d_float(2, 8);
-								box_corners_2d_float << corner_1_top, corner_2_top, corner_3_top, corner_4_top, corner_5_down, corner_6_down, corner_7_down, corner_8_down;
-								// 			  std::cout<<"box_corners_2d_float \n "<<box_corners_2d_float<<std::endl;
+								box_corners_2d_float << corner_1_top, corner_2_top, corner_3_top, corner_4_top,
+								    corner_5_down, corner_6_down, corner_7_down, corner_8_down;
+
 								MatrixXd box_corners_2d_float_shift(2, 8);
 								box_corners_2d_float_shift.row(0) = box_corners_2d_float.row(0).array() - left_x_expan_distmap;
 								box_corners_2d_float_shift.row(1) = box_corners_2d_float.row(1).array() - top_y_expan_distmap;
@@ -477,10 +491,10 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 								else
 									all_configs_error_one_objH.row(valid_config_number_one_objH).segment<2>(7) =
 									        Vector2d(cam_pose_raw.euler_angle(0), cam_pose_raw.euler_angle(1));
-								all_box_corners_2d_one_objH.block(2 * valid_config_number_one_objH, 0, 2, 8) = box_corners_2d_float;
+								all_box_corners_2d_one_objH.block(2 * valid_config_number_one_objH, 0, 2, 8)
+								    = box_corners_2d_float;
 								valid_config_number_one_objH++;
-								if (valid_config_number_one_objH >= all_configs_error_one_objH.rows())
-								{
+								if (valid_config_number_one_objH >= all_configs_error_one_objH.rows()){
 									all_configs_error_one_objH.conservativeResize(2 * valid_config_number_one_objH, NoChange);
 									all_box_corners_2d_one_objH.conservativeResize(4 * valid_config_number_one_objH, NoChange);
 								}
@@ -497,8 +511,9 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 
 			VectorXd normalized_score;
 			vector<int> good_proposal_ids;
-			fuse_normalize_scores_v2(all_configs_error_one_objH.col(4).head(valid_config_number_one_objH), all_configs_error_one_objH.col(5).head(valid_config_number_one_objH),
-									 normalized_score, good_proposal_ids, weight_vp_angle, whether_normalize_two_errors);
+			fuse_normalize_scores_v2(all_configs_error_one_objH.col(4).head(valid_config_number_one_objH),
+                                     all_configs_error_one_objH.col(5).head(valid_config_number_one_objH),
+                                     normalized_score, good_proposal_ids, weight_vp_angle, whether_normalize_two_errors);
 
 			for (int box_id = 0; box_id < good_proposal_ids.size(); box_id++)
 			{
@@ -516,8 +531,15 @@ void detect_3d_cuboid::detect_cuboid(const cv::Mat &rgb_img, const Matrix4d &tra
 				}
 
 				cuboid *sample_obj = new cuboid();
-				change_2d_corner_to_3d_object(all_box_corners_2d_one_objH.block(2 * raw_cube_ind, 0, 2, 8), all_configs_error_one_objH.row(raw_cube_ind).head<3>(),
-											  ground_plane_sensor, cam_pose.transToWolrd, cam_pose.invK, cam_pose.projectionMatrix, *sample_obj);
+				change_2d_corner_to_3d_object(
+				        all_box_corners_2d_one_objH.block(2 * raw_cube_ind, 0, 2, 8),
+				        all_configs_error_one_objH.row(raw_cube_ind).head<3>(),
+				                ground_plane_sensor,
+				                cam_pose.transToWolrd,
+				                cam_pose.invK,
+				                cam_pose.projectionMatrix,
+				                *sample_obj);
+
 				// 		  sample_obj->print_cuboid();
 				if ((sample_obj->scale.array() < 0).any())
 					continue; // scale should be positive

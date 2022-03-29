@@ -164,7 +164,14 @@ void homo_to_real_coord(const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &
 template void homo_to_real_coord<double>(const MatrixXd &, MatrixXd &);
 template void homo_to_real_coord<float>(const MatrixXf &, MatrixXf &);
 
-template <class T> // though vector can be casted into matrix, to make output clear to be vector, it is better to define a new function.
+/**
+ * though vector can be casted into matrix, to make output clear to be vector, it is better to define a new function.
+ * 将齐次坐标转换为非齐次坐标
+ * @tparam T
+ * @param pts_homo_in
+ * @return
+ */
+template <class T>
 Eigen::Matrix<T, Eigen::Dynamic, 1> homo_to_real_coord_vec(const Eigen::Matrix<T, Eigen::Dynamic, 1> &pts_homo_in)
 {
     Eigen::Matrix<T, Eigen::Dynamic, 1> pt_out;

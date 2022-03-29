@@ -8,6 +8,5 @@
 
 # modified environment variables
 export CMAKE_PREFIX_PATH="/home/chen/CLionProjects/cube_slam/src/cube_slam/detect_3d_cuboid/cmake-build-debug/devel:$CMAKE_PREFIX_PATH"
-export PKG_CONFIG_PATH='/opt/ros/melodic/lib/pkgconfig:/usr/local/lib/pkgconfig'
-export ROSLISP_PACKAGE_DIRECTORIES='/home/chen/CLionProjects/cube_slam/src/cube_slam/detect_3d_cuboid/cmake-build-debug/devel/share/common-lisp'
+export ROSLISP_PACKAGE_DIRECTORIES="/home/chen/CLionProjects/cube_slam/src/cube_slam/detect_3d_cuboid/cmake-build-debug/devel/share/common-lisp:$ROSLISP_PACKAGE_DIRECTORIES"
 export ROS_PACKAGE_PATH="/home/chen/CLionProjects/cube_slam/src/cube_slam/detect_3d_cuboid:$ROS_PACKAGE_PATH"

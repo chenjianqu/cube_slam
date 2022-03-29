@@ -119,9 +119,11 @@ void plot_image_with_cuboid_edges(cv::Mat &plot_img, const MatrixXi &box_corners
     for (int edge_id = 0; edge_id < edge_markers.rows(); edge_id++)
     {
         VectorXi edge_conds = edge_markers.row(edge_id);
-        cv::line(plot_img, cv::Point(box_corners_2d(0, edge_conds(0)), box_corners_2d(1, edge_conds(0))),
+        cv::line(plot_img,
+                 cv::Point(box_corners_2d(0, edge_conds(0)), box_corners_2d(1, edge_conds(0))),
                  cv::Point(box_corners_2d(0, edge_conds(1)), box_corners_2d(1, edge_conds(1))),
-                 cv::Scalar(line_markers(edge_conds(2), 0), line_markers(edge_conds(2), 1), line_markers(edge_conds(2), 2)),
+                 cv::Scalar(line_markers(edge_conds(2), 0), line_markers(edge_conds(2), 1),
+                 line_markers(edge_conds(2), 2)),
                  line_markers(edge_conds(2), 3), CV_AA, 0);
     }
 }
@@ -138,12 +140,16 @@ void plot_image_with_edges(const cv::Mat &rgb_img, cv::Mat &output_img, MatrixXd
 {
     output_img = rgb_img.clone();
     for (int i = 0; i < all_lines.rows(); i++)
-        cv::line(output_img, cv::Point(all_lines(i, 0), all_lines(i, 1)), cv::Point(all_lines(i, 2), all_lines(i, 3)), cv::Scalar(255, 0, 0), 2, 8, 0);
+        cv::line(
+                output_img, cv::Point(all_lines(i, 0), all_lines(i, 1)),
+                cv::Point(all_lines(i, 2), all_lines(i, 3)),
+                cv::Scalar(255, 0, 0), 2, 8, 0);
 }
 
 bool check_inside_box(const Vector2d &pt, const Vector2d &box_left_top, const Vector2d &box_right_bottom)
 {
-    return box_left_top(0) <= pt(0) && pt(0) <= box_right_bottom(0) && box_left_top(1) <= pt(1) && pt(1) <= box_right_bottom(1);
+    return box_left_top(0) <= pt(0) && pt(0) <= box_right_bottom(0) &&
+        box_left_top(1) <= pt(1) && pt(1) <= box_right_bottom(1);
 }
 
 /**
@@ -413,7 +419,8 @@ Eigen::MatrixXd VP_support_edge_infos(Eigen::MatrixXd &VPs, Eigen::MatrixXd &edg
             VectorXd vp_edge_midpt_angle_raw_inlier(edge_angles.rows());
             for (int edge_id = 0; edge_id < edge_angles.rows(); edge_id++)
             {
-                double vp1_edge_midpt_angle_raw_i = atan2(edge_mid_pts(edge_id, 1) - VPs(vp_id, 1), edge_mid_pts(edge_id, 0) - VPs(vp_id, 0));
+                double vp1_edge_midpt_angle_raw_i = atan2(edge_mid_pts(edge_id, 1) - VPs(vp_id, 1),
+                                                          edge_mid_pts(edge_id, 0) - VPs(vp_id, 0));
                 double vp1_edge_midpt_angle_norm_i = normalize_to_pi<double>(vp1_edge_midpt_angle_raw_i);
                 double angle_diff_i = std::abs(edge_angles(edge_id) - vp1_edge_midpt_angle_norm_i);
                 angle_diff_i = std::min(angle_diff_i, M_PI - angle_diff_i);
@@ -423,7 +430,7 @@ Eigen::MatrixXd VP_support_edge_infos(Eigen::MatrixXd &VPs, Eigen::MatrixXd &edg
                     vp_inlier_edge_id.push_back(edge_id);
                 }
             }
-            if (vp_inlier_edge_id.size() > 0) // if found inlier edges
+            if (!vp_inlier_edge_id.empty()) // if found inlier edges
             {
                 VectorXd vp1_edge_midpt_angle_raw_inlier_shift;
                 smooth_jump_angles(vp_edge_midpt_angle_raw_inlier.head(vp_inlier_edge_id.size()),
@@ -481,20 +488,20 @@ double box_edge_alignment_angle_error(const MatrixXd &all_vp_bound_edge_angles, 
     {
         Vector2d vp_bound_angles = all_vp_bound_edge_angles.row(vp_id);
         std::vector<double> vp_bound_angles_valid;
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < 2; i++){
             if (!std::isnan(vp_bound_angles(i)))
                 vp_bound_angles_valid.push_back(vp_bound_angles(i));
-        if (vp_bound_angles_valid.size() > 0) //  exist valid edges
-        {
-            for (int ee_id = 0; ee_id < 2; ee_id++) // find cloeset from two boundary edges. we could also do left-left right-right compare. but pay close attention different vp locations
-            {
+        }
+        if (vp_bound_angles_valid.size() > 0){ //  exist valid edges
+            // find cloeset from two boundary edges. we could also do left-left right-right compare. but pay close attention different vp locations
+            for (int ee_id = 0; ee_id < 2; ee_id++){
                 Vector2d two_box_corners_1 = box_corners_2d.col(vps_box_edge_pt_ids(vp_id, 2 * ee_id));     // [ x1;y1 ]
                 Vector2d two_box_corners_2 = box_corners_2d.col(vps_box_edge_pt_ids(vp_id, 2 * ee_id + 1)); // [ x2;y2 ]
 
-                double box_edge_angle = normalize_to_pi(atan2(two_box_corners_2(1) - two_box_corners_1(1), two_box_corners_2(0) - two_box_corners_1(0))); // [-pi/2 -pi/2]
+                double box_edge_angle = normalize_to_pi(atan2(two_box_corners_2(1) - two_box_corners_1(1),
+                                                              two_box_corners_2(0) - two_box_corners_1(0))); // [-pi/2 -pi/2]
                 double angle_diff_temp = 100;
-                for (int i = 0; i < vp_bound_angles_valid.size(); i++)
-                {
+                for (int i = 0; i < vp_bound_angles_valid.size(); i++){
                     double temp = std::abs(box_edge_angle - vp_bound_angles_valid[i]);
                     temp = std::min(temp, M_PI - temp);
                     if (temp < angle_diff_temp)
@@ -503,8 +510,9 @@ double box_edge_alignment_angle_error(const MatrixXd &all_vp_bound_edge_angles, 
                 total_angle_diff = total_angle_diff + angle_diff_temp;
             }
         }
-        else
+        else{
             total_angle_diff = total_angle_diff + not_found_penalty;
+        }
     }
     return total_angle_diff;
 }
@@ -617,6 +625,14 @@ Vector4d get_wall_plane_equation(const Vector3d &gnd_seg_pt1, const Vector3d &gn
     return plane_equation;
 }
 
+/**
+ * 消失点的计算,根据多视图几何,消失点 VPi = K Rcol(i),其中Rcol(i)是矩阵R的第i列
+ * @param KinvR,
+ * @param yaw_esti
+ * @param vp_1
+ * @param vp_2
+ * @param vp_3
+ */
 void getVanishingPoints(const Matrix3d &KinvR, double yaw_esti, Vector2d &vp_1, Vector2d &vp_2, Vector2d &vp_3)
 {
     vp_1 = homo_to_real_coord_vec<double>(KinvR * Vector3d(cos(yaw_esti), sin(yaw_esti), 0));  // for object x axis
@@ -630,16 +646,18 @@ void change_2d_corner_to_3d_object(const MatrixXd &box_corners_2d_float, const V
                                    cuboid &sample_obj)
 {
     Matrix3Xd obj_gnd_pt_world_3d;
-    plane_hits_3d(transToWolrd, invK, ground_plane_sensor, box_corners_2d_float.rightCols(4), obj_gnd_pt_world_3d); //% 3*n each column is a 3D point  floating point
+    //% 3*n each column is a 3D point  floating point
+    plane_hits_3d(transToWolrd, invK, ground_plane_sensor, box_corners_2d_float.rightCols(4), obj_gnd_pt_world_3d);
 
     double length_half = (obj_gnd_pt_world_3d.col(0) - obj_gnd_pt_world_3d.col(3)).norm() / 2; // along object x direction   corner 5-8
     double width_half = (obj_gnd_pt_world_3d.col(0) - obj_gnd_pt_world_3d.col(1)).norm() / 2;  // along object y direction   corner 5-6
-
-    Vector4d partwall_plane_world = get_wall_plane_equation(obj_gnd_pt_world_3d.col(0), obj_gnd_pt_world_3d.col(1)); //% to compute height, need to unproject-hit-planes formed by 5-6 corner
+    //% to compute height, need to unproject-hit-planes formed by 5-6 corner
+    Vector4d partwall_plane_world = get_wall_plane_equation(obj_gnd_pt_world_3d.col(0), obj_gnd_pt_world_3d.col(1));
     Vector4d partwall_plane_sensor = transToWolrd.transpose() * partwall_plane_world;                                // wall plane in sensor frame
 
     Matrix3Xd obj_top_pt_world_3d;
-    plane_hits_3d(transToWolrd, invK, partwall_plane_sensor, box_corners_2d_float.col(1), obj_top_pt_world_3d); // should match obj_gnd_pt_world_3d  % compute corner 2
+    // should match obj_gnd_pt_world_3d  % compute corner 2
+    plane_hits_3d(transToWolrd, invK, partwall_plane_sensor, box_corners_2d_float.col(1), obj_top_pt_world_3d);
     double height_half = obj_top_pt_world_3d(2, 0) / 2;
 
     double mean_obj_x = obj_gnd_pt_world_3d.row(0).mean();
